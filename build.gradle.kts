@@ -37,6 +37,14 @@ dependencies {
 
     // Preconditions
     implementation(libs.guava)
+
+    // Testing
+    testImplementation(libs.junit.jupiter.api)
+    testImplementation("org.assertj:assertj-core:3.27.7")
+    testImplementation(testFixtures(libs.connector.api))
+    testRuntimeOnly(libs.junit.jupiter.engine)
+    testRuntimeOnly("org.junit.platform:junit-platform-launcher")
+    testRuntimeOnly(libs.slf4j.simple)
 }
 
 xjc {
@@ -53,4 +61,8 @@ tasks.processResources {
     filesMatching("McpClientConnector.yaml") {
         expand("version" to project.version)
     }
+}
+
+tasks.test {
+    useJUnitPlatform()
 }

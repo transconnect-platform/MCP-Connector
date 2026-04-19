@@ -18,6 +18,10 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Content;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
+import io.modelcontextprotocol.spec.McpSchema.ImageContent;
+import io.modelcontextprotocol.spec.McpSchema.EmbeddedResource;
+import io.modelcontextprotocol.spec.McpSchema.TextResourceContents;
+import io.modelcontextprotocol.spec.McpSchema.BlobResourceContents;
 import io.transconnect.connector.api.Configuration;
 import io.transconnect.connector.api.Context;
 import io.transconnect.connector.api.TransconnectConnectorException;
@@ -26,8 +30,10 @@ import io.transconnect.connector.api.message.Message;
 import io.transconnect.connector.api.message.WritableMessage;
 import io.transconnect.connector.extension.jaxb.JaxbExtension;
 import java.io.IOException;
+import java.io.OutputStream;
 import java.net.URI;
 import java.time.Duration;
+import java.util.Base64;
 import java.util.List;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -135,7 +141,7 @@ public class McpClientConnection implements ConsumerConnection {
     private void executeInteractionExecute(Message input, WritableMessage output)
             throws TransconnectConnectorException {
         io.transconnect.connector.mcp.execute.in.ROOT root = jaxbExtension.unmarshalMessage(
-                input, io.transconnect.connector.mcp.execute.in.ROOT.class, "/schema/execute_in.xsd", null);
+                input, io.transconnect.connector.mcp.execute.in.ROOT.class, "schema/execute_in.xsd", null);
 
         var resultRoot = new io.transconnect.connector.mcp.execute.out.ROOT();
 
@@ -183,11 +189,39 @@ public class McpClientConnection implements ConsumerConnection {
         CallToolResult callToolResult = mcpSyncClient.callTool(callToolRequest);
 
         // evaluate tool result
+        int imageCount = 0;
+        int resourceCount = 0;
         StringBuilder textResultBuilder = new StringBuilder();
         for (Content content : callToolResult.content()) {
             if ("text".equals(content.type())) {
                 TextContent textContent = (TextContent) content;
                 textResultBuilder.append(textContent.text());
+            }
+            else if("image".equals(content.type())) {
+                ImageContent imageContent = (ImageContent) content;
+
+                // get file extension from MIME type (e.g. "image/png" -> "png")
+                String fileExtension = com.google.common.net.MediaType.parse(imageContent.mimeType()).subtype();
+                String attachmentId = String.format("image_%d.%s", imageCount++, fileExtension);
+                try(OutputStream outputStream = output.getAttachmentOutputStream(attachmentId)) {
+                    outputStream.write(Base64.getDecoder().decode(imageContent.data()));
+                } catch (IOException e) {
+                    LOG.error("Unable to add attachment '{}'", attachmentId, e);
+                }
+
+            } else if("resource".equals(content.type())) {
+                EmbeddedResource embeddedResource = (EmbeddedResource) content;
+                String attachmentId = String.format("resource_%d", resourceCount++);
+                try(OutputStream outputStream = output.getAttachmentOutputStream(attachmentId)) {
+                    if (embeddedResource.resource() instanceof TextResourceContents textResourceContents) {
+                        outputStream.write(textResourceContents.text().getBytes());
+                    }
+                    else if (embeddedResource.resource() instanceof BlobResourceContents blobResourceContents) {
+                        outputStream.write(blobResourceContents.blob().getBytes());
+                    }
+                } catch (IOException e) {
+                    LOG.error("Unable to add attachment '{}'", attachmentId, e);
+                }
             } else {
                 LOG.warn(
                         "Unsupported content type '{}' in tool result for tool '{}'. Result will be empty.",

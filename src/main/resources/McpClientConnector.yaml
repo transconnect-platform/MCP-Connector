@@ -88,7 +88,7 @@ properties:
     type: TEXT
     required: false
 interactions:
-  - id: "execute"
+  - id: "EXECUTE"
     displayName:
       - locale: de
         message: "Tool ausführen"
@@ -101,7 +101,7 @@ interactions:
         message: "Executes a tool available via the MCP (Model Context Protocol) interface. The client sends a request to the server to execute the tool with the specified parameters. The response contains the results of the execution."
     inMessageXsd: schema/execute_in.xsd
     outMessageXsd: schema/execute_out.xsd
-  - id: "listtools"
+  - id: "LISTTOOLS"
     displayName:
       - locale: de
         message: "Tools auflisten"
