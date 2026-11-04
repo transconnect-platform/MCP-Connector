@@ -4,14 +4,13 @@
 
 package io.transconnect.connector.mcp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
@@ -28,7 +27,9 @@ import io.transconnect.connector.extension.jaxb.JaxbExtension;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -161,8 +162,7 @@ public class McpClientConnection implements ConsumerConnection {
         LOG.info("Executing tool: {}", tool.getNAME());
 
         // create tool request
-        ObjectMapper mapper = new ObjectMapper();
-        ObjectNode parameters = mapper.createObjectNode();
+        Map<String, Object> parameters = new LinkedHashMap<>();
         for (io.transconnect.connector.mcp.execute.in.ROOT.TOOL.PARAM param : tool.getPARAM()) {
             // handle primitive parameter types according to JSON RPC 2.0 specification
             // (https://www.jsonrpc.org/specification#conventions)
@@ -177,7 +177,7 @@ public class McpClientConnection implements ConsumerConnection {
                 }
             }
         }
-        CallToolRequest callToolRequest = new CallToolRequest(tool.getNAME(), parameters.toString());
+        CallToolRequest callToolRequest = CallToolRequest.builder(tool.getNAME()).arguments(parameters).build();
 
         // execute tool
         CallToolResult callToolResult = mcpSyncClient.callTool(callToolRequest);
@@ -230,7 +230,7 @@ public class McpClientConnection implements ConsumerConnection {
             }
         }
 
-        return new StdioClientTransport(paramsBuilder.build());
+        return new StdioClientTransport(paramsBuilder.build(), McpJsonDefaults.getMapper());
     }
 
     /**
