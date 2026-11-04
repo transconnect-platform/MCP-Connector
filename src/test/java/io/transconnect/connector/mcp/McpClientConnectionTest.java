@@ -77,7 +77,7 @@ class McpClientConnectionTest {
                         toMessage(output), io.transconnect.connector.mcp.listtools.out.ROOT.class, null, null)
                 .getRETURN()
                 .getTOOL();
-        assertEquals(List.of("echo", "add", "not", "image"), tools.stream().map(t -> t.getNAME()).toList());
+        assertEquals(List.of("echo", "add", "not", "image", "env"), tools.stream().map(t -> t.getNAME()).toList());
         assertEquals("Adds two numbers", tools.get(1).getDESCRIPTION());
     }
 

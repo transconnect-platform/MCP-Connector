@@ -27,16 +27,22 @@ import io.transconnect.connector.extension.jaxb.JaxbExtension;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 public class McpClientConnection implements ConsumerConnection {
     private static final Logger LOG = LoggerFactory.getLogger(McpClientConnection.class);
+
+    /** A part of the STDIO server command: either a double-quoted string (group 1) or a word (group 2). */
+    private static final Pattern COMMAND_PART = Pattern.compile("\"([^\"]*)\"|(\\S+)");
 
     private final Configuration configuration;
 
@@ -214,8 +220,12 @@ public class McpClientConnection implements ConsumerConnection {
      */
     private McpClientTransport connectStdio() {
         String serverCommand = configuration.getString("server").orElseThrow();
-        List<String> serverCommandParts =
-                List.of(serverCommand.split(" ")); // Ensure the command is split into arguments
+        // split into command and arguments at whitespace; double quotes group a part containing spaces
+        List<String> serverCommandParts = new ArrayList<>();
+        Matcher matcher = COMMAND_PART.matcher(serverCommand);
+        while (matcher.find()) {
+            serverCommandParts.add(matcher.group(1) != null ? matcher.group(1) : matcher.group(2));
+        }
         Preconditions.checkArgument(!serverCommandParts.isEmpty(), "Server command must not be empty");
 
         ServerParameters.Builder paramsBuilder = ServerParameters.builder(serverCommandParts.get(0))

@@ -69,9 +69,9 @@ properties:
         message: "Server"
     description:
       - locale: de
-        message: "für STDIO Transport: Kommando + Argument um Server zu starten, für HTTP mit SSE: Server URL"
+        message: "für STDIO Transport: Kommando + Argumente um Server zu starten (Teile mit Leerzeichen in doppelte Anführungszeichen setzen), für HTTP mit SSE: Server URL"
       - locale: en
-        message: "For STDIO transport: Command + arguments to start the server, for HTTP with SSE: Server URL"
+        message: "For STDIO transport: Command + arguments to start the server (enclose parts containing spaces in double quotes), for HTTP with SSE: Server URL"
     type: TEXT
     required: true
   - id: environment
