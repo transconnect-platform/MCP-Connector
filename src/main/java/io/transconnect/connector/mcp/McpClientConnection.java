@@ -29,6 +29,7 @@ import java.net.URI;
 import java.time.Duration;
 import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
 import org.slf4j.Logger;
@@ -98,7 +99,8 @@ public class McpClientConnection implements ConsumerConnection {
     @Override
     public void execute(URI interactionId, Message input, WritableMessage output)
             throws TransconnectConnectorException {
-        switch (interactionId.toString()) {
+        // interaction ids in the descriptor are lower case, accept any case
+        switch (interactionId.toString().toUpperCase(Locale.ROOT)) {
             case uriExecute -> executeInteractionExecute(input, output);
             case uriListTools -> executeInteractionListTools(input, output);
             default -> throw new TransconnectConnectorException("Unknown interaction: " + interactionId);
@@ -136,7 +138,7 @@ public class McpClientConnection implements ConsumerConnection {
     private void executeInteractionExecute(Message input, WritableMessage output)
             throws TransconnectConnectorException {
         io.transconnect.connector.mcp.execute.in.ROOT root = jaxbExtension.unmarshalMessage(
-                input, io.transconnect.connector.mcp.execute.in.ROOT.class, "/schema/execute_in.xsd", null);
+                input, io.transconnect.connector.mcp.execute.in.ROOT.class, "schema/execute_in.xsd", null);
 
         var resultRoot = new io.transconnect.connector.mcp.execute.out.ROOT();
 

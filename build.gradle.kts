@@ -36,6 +36,18 @@ dependencies {
 
     // Preconditions
     implementation(libs.guava)
+
+    // Test
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testImplementation(testFixtures(libs.connector.api))
+    // embedded servlet container hosting the MCP SDK's SSE server transport
+    testImplementation(libs.tomcat.embed.core)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 xjc {
