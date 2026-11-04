@@ -41,6 +41,21 @@ import org.slf4j.LoggerFactory;
 public class McpClientConnection implements ConsumerConnection {
     private static final Logger LOG = LoggerFactory.getLogger(McpClientConnection.class);
 
+    static {
+        // The MCP SDK looks up its JSON implementation via ServiceLoader with the thread context class loader, which
+        // cannot see the connector's libraries in TRANSCONNECT. Resolve the defaults once with the connector's class
+        // loader; McpJsonDefaults caches them for all later calls, on any thread.
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        thread.setContextClassLoader(McpClientConnection.class.getClassLoader());
+        try {
+            McpJsonDefaults.getMapper();
+            McpJsonDefaults.getSchemaValidator();
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
+
     /** Same as the default value of the requestTimeout property in the connector descriptor. */
     private static final long DEFAULT_REQUEST_TIMEOUT_MILLIS = 10_000L;
 
