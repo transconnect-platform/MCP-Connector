@@ -93,6 +93,21 @@ The connector is configured using the TRANSCONNECT Connector YAML descriptor loc
 | `environment`    | STDIO only: environment variables for the server process in the form `KEY=VALUE`, separated by semicolons                                                                           |
 | `requestTimeout` | Timeout in milliseconds for all requests to the server, including tool calls (default: `10000`)                                                                                     |
 
+Example `server` value for STDIO (do not enclose the whole command in quotes):
+
+```
+npx -y @modelcontextprotocol/server-filesystem /temp
+```
+
+On Windows, scripts such as `npx` cannot be started without their extension. Use `npx.cmd` instead:
+
+```
+npx.cmd -y @modelcontextprotocol/server-filesystem C:\temp
+```
+
+If the server process cannot be started, connecting fails with `Could not connect to the MCP server: Failed to start process with command: [...]`
+after the request timeout.
+
 ### Interactions
 
 **`listtools`** lists the tools of the server:
@@ -128,6 +143,8 @@ For manual testing you can use the [MCP Everything Server](https://github.com/mo
 ```
 npx -y @modelcontextprotocol/server-everything stdio
 ```
+
+On Windows use `npx.cmd -y @modelcontextprotocol/server-everything stdio`.
 
 ## Open Points
 
