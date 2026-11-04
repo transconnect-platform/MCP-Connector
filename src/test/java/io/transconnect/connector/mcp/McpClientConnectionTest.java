@@ -19,6 +19,7 @@ import io.transconnect.connector.api.extension.ExtensionManager;
 import io.transconnect.connector.extension.jaxb.JaxbExtension;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import org.junit.jupiter.api.AfterAll;
@@ -51,8 +52,9 @@ class McpClientConnectionTest {
 
     @BeforeEach
     void createContext() throws TransconnectConnectorException {
-        MockConfig config = new MockConfig(Map.of(
-                "transport", Transport.HTTP_SSE.name(), "server", server.url(), "requestTimeout", 10_000L));
+        // mutable, MockConfig.setValue writes into this map
+        MockConfig config = new MockConfig(new HashMap<>(Map.of(
+                "transport", Transport.HTTP_SSE.name(), "server", server.url(), "requestTimeout", 10_000L)));
         context = new MockContext(config, new ExtensionManager(McpClientConnector.class).getExtensions());
         jaxb = context.getExtension(JaxbExtension.class).orElseThrow();
     }
@@ -77,7 +79,7 @@ class McpClientConnectionTest {
                         toMessage(output), io.transconnect.connector.mcp.listtools.out.ROOT.class, null, null)
                 .getRETURN()
                 .getTOOL();
-        assertEquals(List.of("echo", "add", "not", "image", "env"), tools.stream().map(t -> t.getNAME()).toList());
+        assertEquals(List.of("echo", "add", "not", "image", "env", "sleep"), tools.stream().map(t -> t.getNAME()).toList());
         assertEquals("Adds two numbers", tools.get(1).getDESCRIPTION());
     }
 
@@ -115,6 +117,16 @@ class McpClientConnectionTest {
 
         var exception = assertThrows(IllegalArgumentException.class, () -> execute("execute", input));
         assertTrue(exception.getMessage().contains("Unsupported parameter type 'object'"), exception.getMessage());
+    }
+
+    @Test
+    void executeFailsWhenToolTakesLongerThanRequestTimeout() {
+        ((MockConfig) context.getConfiguration()).setValue("requestTimeout", 500L);
+        String input = "<ROOT xmlns=\"%s\"><TOOL NAME=\"sleep\"><PARAM NAME=\"millis\" TYPE=\"number\">3000</PARAM></TOOL></ROOT>"
+                .formatted(EXECUTE_NS);
+
+        var exception = assertThrows(RuntimeException.class, () -> execute("execute", input));
+        assertTrue(exception.toString().contains("Timeout"), exception::toString);
     }
 
     @Test

@@ -74,7 +74,15 @@ final class McpTestServer implements AutoCloseable {
                                 .build())
                 .toolCall(
                         tool("env", "Returns the value of an environment variable", Map.of("name", "string")),
-                        (exchange, request) -> text(String.valueOf(System.getenv((String) request.arguments().get("name")))));
+                        (exchange, request) -> text(String.valueOf(System.getenv((String) request.arguments().get("name")))))
+                .toolCall(tool("sleep", "Sleeps the given milliseconds", Map.of("millis", "number")), (exchange, request) -> {
+                    try {
+                        Thread.sleep(((Number) request.arguments().get("millis")).longValue());
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    return text("slept");
+                });
     }
 
     /** Base URL of the server, as configured in the connector's {@code server} property. */

@@ -41,6 +41,9 @@ import org.slf4j.LoggerFactory;
 public class McpClientConnection implements ConsumerConnection {
     private static final Logger LOG = LoggerFactory.getLogger(McpClientConnection.class);
 
+    /** Same as the default value of the requestTimeout property in the connector descriptor. */
+    private static final long DEFAULT_REQUEST_TIMEOUT_MILLIS = 10_000L;
+
     /** A part of the STDIO server command: either a double-quoted string (group 1) or a word (group 2). */
     private static final Pattern COMMAND_PART = Pattern.compile("\"([^\"]*)\"|(\\S+)");
 
@@ -85,7 +88,8 @@ public class McpClientConnection implements ConsumerConnection {
 
         // Create a sync client with custom configuration
         mcpSyncClient = McpClient.sync(mcpTransport)
-                .requestTimeout(Duration.ofSeconds(10))
+                .requestTimeout(Duration.ofMillis(
+                        configuration.getLong("requestTimeout").orElse(DEFAULT_REQUEST_TIMEOUT_MILLIS)))
                 .capabilities(ClientCapabilities.builder()
                         .roots(true) // Enable roots capability
                         .build())
