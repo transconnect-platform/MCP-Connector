@@ -16,6 +16,7 @@ import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Content;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.transconnect.connector.api.Configuration;
 import io.transconnect.connector.api.Context;
@@ -33,10 +34,12 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 public class McpClientConnection implements ConsumerConnection {
     private static final Logger LOG = LoggerFactory.getLogger(McpClientConnection.class);
@@ -71,6 +74,9 @@ public class McpClientConnection implements ConsumerConnection {
     private final JaxbExtension jaxbExtension;
 
     private McpSyncClient mcpSyncClient;
+
+    /** Error of the transport while connecting, only reported by the MCP client as initialization timeout. */
+    private volatile Throwable transportError;
 
     /**
      * Constructs a new McpClientConnection with the specified context.
@@ -111,7 +117,15 @@ public class McpClientConnection implements ConsumerConnection {
                 .build();
 
         // initialize connection
-        mcpSyncClient.initialize();
+        try {
+            mcpSyncClient.initialize();
+        } catch (RuntimeException e) {
+            if (transportError != null) {
+                throw new TransconnectConnectorException(
+                        "Could not connect to the MCP server: " + transportError.getMessage(), transportError);
+            }
+            throw e;
+        }
 
         LOG.info("MCP client initialized successfully");
     }
@@ -261,7 +275,14 @@ public class McpClientConnection implements ConsumerConnection {
             }
         }
 
-        return new StdioClientTransport(paramsBuilder.build(), McpJsonDefaults.getMapper());
+        return new StdioClientTransport(paramsBuilder.build(), McpJsonDefaults.getMapper()) {
+            @Override
+            public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+                // the MCP client only logs this error (e.g. the server process cannot be started) and then runs into
+                // the initialization timeout, remember it to report the actual cause
+                return super.connect(handler).doOnError(error -> transportError = error);
+            }
+        };
     }
 
     /**

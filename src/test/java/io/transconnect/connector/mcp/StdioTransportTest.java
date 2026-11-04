@@ -5,11 +5,14 @@
 package io.transconnect.connector.mcp;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertThrows;
+import static org.junit.jupiter.api.Assertions.assertTrue;
 
 import io.transconnect.connector.MockConfig;
 import io.transconnect.connector.MockContext;
 import io.transconnect.connector.MockMessage;
 import io.transconnect.connector.MockWritableMessage;
+import io.transconnect.connector.api.TransconnectConnectorException;
 import io.transconnect.connector.api.consumer.ConsumerConnection;
 import io.transconnect.connector.api.extension.ExtensionManager;
 import io.transconnect.connector.extension.jaxb.JaxbExtension;
@@ -56,5 +59,23 @@ class StdioTransportTest {
                 .unmarshalMessage(
                         new MockMessage(new String(output.getBody(), StandardCharsets.UTF_8)), ROOT.class, null, null);
         assertEquals("hello stdio", result.getRETURN().get(0).getDATA());
+    }
+
+    @Test
+    void connectReportsWhyTheServerProcessCouldNotBeStarted() throws Exception {
+        // e.g. the whole command enclosed in quotes is taken as name of the executable
+        MockConfig config = new MockConfig(Map.of(
+                "transport", Transport.STDIO.name(),
+                "server", "\"npx @modelcontextprotocol/server-filesystem /temp\"",
+                "requestTimeout", 1_000L));
+        MockContext context =
+                new MockContext(config, new ExtensionManager(McpClientConnector.class).getExtensions());
+
+        try (ConsumerConnection connection = new McpClientConnector().createConnection(context)) {
+            var exception = assertThrows(TransconnectConnectorException.class, connection::connect);
+            assertTrue(
+                    exception.getMessage().contains("npx @modelcontextprotocol/server-filesystem /temp"),
+                    exception.getMessage());
+        }
     }
 }
