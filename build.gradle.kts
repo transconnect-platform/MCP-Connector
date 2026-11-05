@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.transconnect.connector"
-version = "0.0.1"
+version = "0.1.0"
 description = "MCP (Model Context Protocol) Connector for TRANSCONNECT"
 
 base {

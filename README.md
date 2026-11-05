@@ -123,7 +123,7 @@ after the request timeout.
     <TOOL NAME="echo">
         <PARAM NAME="message" TYPE="string">Hello MCP</PARAM>
     </TOOL>
-    <TOOL NAME="add">
+    <TOOL NAME="get-sum">
         <PARAM NAME="a" TYPE="number">2</PARAM>
         <PARAM NAME="b" TYPE="number">3</PARAM>
     </TOOL>
