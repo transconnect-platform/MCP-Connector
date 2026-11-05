@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "io.transconnect.connector"
-version = "0.0.1"
+version = "0.1.0"
 description = "MCP (Model Context Protocol) Connector for TRANSCONNECT"
 
 base {
@@ -27,7 +27,6 @@ dependencies {
     providedCompile(libs.slf4j.api)
 
     // Connector SDK
-    implementation(libs.connector.war.bridge)
     implementation(libs.connector.yaml.descriptor)
     implementation(libs.connector.jaxb)
 
@@ -37,6 +36,18 @@ dependencies {
 
     // Preconditions
     implementation(libs.guava)
+
+    // Test
+    testImplementation(platform(libs.junit.bom))
+    testImplementation(libs.junit.jupiter)
+    testImplementation(testFixtures(libs.connector.api))
+    // embedded servlet container hosting the MCP SDK's SSE server transport
+    testImplementation(libs.tomcat.embed.core)
+    testRuntimeOnly(libs.junit.platform.launcher)
+}
+
+tasks.test {
+    useJUnitPlatform()
 }
 
 xjc {
@@ -50,7 +61,9 @@ artifacts {
 
 // Replace the version in the Connector Descriptor
 tasks.processResources {
+    val connectorVersion = project.version.toString()
+    inputs.property("version", connectorVersion)
     filesMatching("McpClientConnector.yaml") {
-        expand("version" to project.version)
+        expand("version" to connectorVersion)
     }
 }

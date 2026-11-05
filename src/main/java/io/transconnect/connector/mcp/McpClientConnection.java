@@ -4,19 +4,19 @@
 
 package io.transconnect.connector.mcp;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.google.common.base.Preconditions;
 import io.modelcontextprotocol.client.McpClient;
 import io.modelcontextprotocol.client.McpSyncClient;
 import io.modelcontextprotocol.client.transport.HttpClientSseClientTransport;
 import io.modelcontextprotocol.client.transport.ServerParameters;
 import io.modelcontextprotocol.client.transport.StdioClientTransport;
+import io.modelcontextprotocol.json.McpJsonDefaults;
 import io.modelcontextprotocol.spec.McpClientTransport;
 import io.modelcontextprotocol.spec.McpSchema.CallToolRequest;
 import io.modelcontextprotocol.spec.McpSchema.CallToolResult;
 import io.modelcontextprotocol.spec.McpSchema.ClientCapabilities;
 import io.modelcontextprotocol.spec.McpSchema.Content;
+import io.modelcontextprotocol.spec.McpSchema.JSONRPCMessage;
 import io.modelcontextprotocol.spec.McpSchema.TextContent;
 import io.transconnect.connector.api.Configuration;
 import io.transconnect.connector.api.Context;
@@ -28,13 +28,42 @@ import io.transconnect.connector.extension.jaxb.JaxbExtension;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Locale;
+import java.util.Map;
 import java.util.Optional;
+import java.util.function.Function;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import reactor.core.publisher.Mono;
 
 public class McpClientConnection implements ConsumerConnection {
     private static final Logger LOG = LoggerFactory.getLogger(McpClientConnection.class);
+
+    static {
+        // The MCP SDK looks up its JSON implementation via ServiceLoader with the thread context class loader, which
+        // cannot see the connector's libraries in TRANSCONNECT. Resolve the defaults once with the connector's class
+        // loader; McpJsonDefaults caches them for all later calls, on any thread.
+        Thread thread = Thread.currentThread();
+        ClassLoader previous = thread.getContextClassLoader();
+        thread.setContextClassLoader(McpClientConnection.class.getClassLoader());
+        try {
+            McpJsonDefaults.getMapper();
+            McpJsonDefaults.getSchemaValidator();
+        } finally {
+            thread.setContextClassLoader(previous);
+        }
+    }
+
+    /** Same as the default value of the requestTimeout property in the connector descriptor. */
+    private static final long DEFAULT_REQUEST_TIMEOUT_MILLIS = 10_000L;
+
+    /** A part of the STDIO server command: either a double-quoted string (group 1) or a word (group 2). */
+    private static final Pattern COMMAND_PART = Pattern.compile("\"([^\"]*)\"|(\\S+)");
 
     private final Configuration configuration;
 
@@ -45,6 +74,9 @@ public class McpClientConnection implements ConsumerConnection {
     private final JaxbExtension jaxbExtension;
 
     private McpSyncClient mcpSyncClient;
+
+    /** Error of the transport while connecting, only reported by the MCP client as initialization timeout. */
+    private volatile Throwable transportError;
 
     /**
      * Constructs a new McpClientConnection with the specified context.
@@ -77,14 +109,23 @@ public class McpClientConnection implements ConsumerConnection {
 
         // Create a sync client with custom configuration
         mcpSyncClient = McpClient.sync(mcpTransport)
-                .requestTimeout(Duration.ofSeconds(10))
+                .requestTimeout(Duration.ofMillis(
+                        configuration.getLong("requestTimeout").orElse(DEFAULT_REQUEST_TIMEOUT_MILLIS)))
                 .capabilities(ClientCapabilities.builder()
                         .roots(true) // Enable roots capability
                         .build())
                 .build();
 
         // initialize connection
-        mcpSyncClient.initialize();
+        try {
+            mcpSyncClient.initialize();
+        } catch (RuntimeException e) {
+            if (transportError != null) {
+                throw new TransconnectConnectorException(
+                        "Could not connect to the MCP server: " + transportError.getMessage(), transportError);
+            }
+            throw e;
+        }
 
         LOG.info("MCP client initialized successfully");
     }
@@ -97,7 +138,8 @@ public class McpClientConnection implements ConsumerConnection {
     @Override
     public void execute(URI interactionId, Message input, WritableMessage output)
             throws TransconnectConnectorException {
-        switch (interactionId.toString()) {
+        // interaction ids in the descriptor are lower case, accept any case
+        switch (interactionId.toString().toUpperCase(Locale.ROOT)) {
             case uriExecute -> executeInteractionExecute(input, output);
             case uriListTools -> executeInteractionListTools(input, output);
             default -> throw new TransconnectConnectorException("Unknown interaction: " + interactionId);
@@ -135,7 +177,7 @@ public class McpClientConnection implements ConsumerConnection {
     private void executeInteractionExecute(Message input, WritableMessage output)
             throws TransconnectConnectorException {
         io.transconnect.connector.mcp.execute.in.ROOT root = jaxbExtension.unmarshalMessage(
-                input, io.transconnect.connector.mcp.execute.in.ROOT.class, "/schema/execute_in.xsd", null);
+                input, io.transconnect.connector.mcp.execute.in.ROOT.class, "schema/execute_in.xsd", null);
 
         var resultRoot = new io.transconnect.connector.mcp.execute.out.ROOT();
 
@@ -161,8 +203,7 @@ public class McpClientConnection implements ConsumerConnection {
         LOG.info("Executing tool: {}", tool.getNAME());
 
         // create tool request
-        ObjectMapper mapper = new ObjectMapper();
-        ObjectNode parameters = mapper.createObjectNode();
+        Map<String, Object> parameters = new LinkedHashMap<>();
         for (io.transconnect.connector.mcp.execute.in.ROOT.TOOL.PARAM param : tool.getPARAM()) {
             // handle primitive parameter types according to JSON RPC 2.0 specification
             // (https://www.jsonrpc.org/specification#conventions)
@@ -177,7 +218,7 @@ public class McpClientConnection implements ConsumerConnection {
                 }
             }
         }
-        CallToolRequest callToolRequest = new CallToolRequest(tool.getNAME(), parameters.toString());
+        CallToolRequest callToolRequest = CallToolRequest.builder(tool.getNAME()).arguments(parameters).build();
 
         // execute tool
         CallToolResult callToolResult = mcpSyncClient.callTool(callToolRequest);
@@ -212,8 +253,12 @@ public class McpClientConnection implements ConsumerConnection {
      */
     private McpClientTransport connectStdio() {
         String serverCommand = configuration.getString("server").orElseThrow();
-        List<String> serverCommandParts =
-                List.of(serverCommand.split(" ")); // Ensure the command is split into arguments
+        // split into command and arguments at whitespace; double quotes group a part containing spaces
+        List<String> serverCommandParts = new ArrayList<>();
+        Matcher matcher = COMMAND_PART.matcher(serverCommand);
+        while (matcher.find()) {
+            serverCommandParts.add(matcher.group(1) != null ? matcher.group(1) : matcher.group(2));
+        }
         Preconditions.checkArgument(!serverCommandParts.isEmpty(), "Server command must not be empty");
 
         ServerParameters.Builder paramsBuilder = ServerParameters.builder(serverCommandParts.get(0))
@@ -230,7 +275,14 @@ public class McpClientConnection implements ConsumerConnection {
             }
         }
 
-        return new StdioClientTransport(paramsBuilder.build());
+        return new StdioClientTransport(paramsBuilder.build(), McpJsonDefaults.getMapper()) {
+            @Override
+            public Mono<Void> connect(Function<Mono<JSONRPCMessage>, Mono<JSONRPCMessage>> handler) {
+                // the MCP client only logs this error (e.g. the server process cannot be started) and then runs into
+                // the initialization timeout, remember it to report the actual cause
+                return super.connect(handler).doOnError(error -> transportError = error);
+            }
+        };
     }
 
     /**

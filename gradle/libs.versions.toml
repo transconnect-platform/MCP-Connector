@@ -1,15 +1,16 @@
 [versions]
-connector-sdk = "0.9.6"
-slf4j-api = "1.7.36"
-mcp-bom = "0.10.0"
-guava = "32.1.1-jre"
-xjc = "1.8.2"
+connector-sdk = "1.2.1"
+slf4j-api = "2.0.20"
+mcp-bom = "2.1.0"
+guava = "33.8.0-jre"
+xjc = "1.9.1"
+junit-bom = "5.14.4"
+tomcat = "11.0.27"
 
 [libraries]
 slf4j-api = { module = "org.slf4j:slf4j-api", version.ref = "slf4j-api" }
 
 connector-api = { module = "io.transconnect.connector:api", version.ref = "connector-sdk" }
-connector-war-bridge = { module = "io.transconnect.connector:war-connector-bridge", version.ref = "connector-sdk" }
 connector-yaml-descriptor = { module = "io.transconnect.connector.extensions:yaml-descriptor", version.ref = "connector-sdk" }
 connector-jaxb = { module = "io.transconnect.connector.extensions:jaxb", version.ref = "connector-sdk" }
 
@@ -17,6 +18,12 @@ mcp-bom = { module = "io.modelcontextprotocol.sdk:mcp-bom", version.ref = "mcp-b
 mcp = { module = "io.modelcontextprotocol.sdk:mcp" }
 
 guava = { module = "com.google.guava:guava", version.ref = "guava" }
+
+# Test
+junit-bom = { module = "org.junit:junit-bom", version.ref = "junit-bom" }
+junit-jupiter = { module = "org.junit.jupiter:junit-jupiter" }
+junit-platform-launcher = { module = "org.junit.platform:junit-platform-launcher" }
+tomcat-embed-core = { module = "org.apache.tomcat.embed:tomcat-embed-core", version.ref = "tomcat" }
 
 [plugins]
 xjc = { id = "com.github.bjornvester.xjc", version.ref = "xjc" }
